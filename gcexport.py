@@ -126,12 +126,11 @@ data = {'service': REDIRECT,
         'embedWidget': 'false',
         'generateExtraServiceTicket': 'false'}
 
-print urllib.urlencode(data)
-
 # URLs for various services.
 url_gc_login = 'https://sso.garmin.com/sso/login?' + urllib.urlencode(data)
 url_gc_post_auth = 'https://connect.garmin.com/modern/activities?'
-url_gc_summary = 'https://connect.garmin.com/proxy/activity-search-service-1.2/json/activities?start=0&limit=1'
+url_gc_profile = 'https://connect.garmin.com/modern/profile'
+url_gc_userstats = 'https://connect.garmin.com/modern/proxy/userstats-service/statistics/'
 url_gc_search = 'https://connect.garmin.com/modern/proxy/activitylist-service/activities/search/activities?'
 url_gc_activity = 'https://connect.garmin.com/modern/proxy/activity-service/activity/'
 url_gc_original_activity = 'http://connect.garmin.com/proxy/download-service/files/activity/'
@@ -158,7 +157,6 @@ login_ticket = match.group(1)
 print 'login ticket=' + login_ticket
 
 print 'Request authentication'
-# print url_gc_post_auth + 'ticket=' + login_ticket
 http_req(url_gc_post_auth + 'ticket=' + login_ticket)
 print 'Finished authentication'
 
@@ -166,17 +164,26 @@ print 'Finished authentication'
 if not isdir(args.directory):
     mkdir(args.directory)
 
-# If the user wants to download all activities, first download one,
-# then the result of that request will tell us how many are available
-# so we will modify the variables then.
-print "Making result summary request ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-print url_gc_summary
-result = http_req(url_gc_summary)
-print "Finished result summary request ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+# To download all activities, query the userstats on the profile page to know how many are available
+print("Getting display name and user stats")
+profile_page = http_req(url_gc_profile)
 
-# Modify total_to_download based on how many activities the server reports.
+# Extract the display name from the profile page, it should be in there as
+# \"displayName\":\"eschep\"
+pattern = re.compile(r".*\\\"displayName\\\":\\\"([-\w]+)\\\".*", re.MULTILINE | re.DOTALL)
+match = pattern.match(profile_page)
+if not match:
+    raise Exception('Did not find the display name in the profile page.')
+display_name = match.group(1)
+print('displayName=' + display_name)
+
+result = http_req(url_gc_userstats + display_name)
+print("Finished display name and user stats")
+
+print result
+
 json_results = json.loads(result)
-total_to_download = int(json_results['results']['totalFound'])
+total_to_download = int(json_results['userMetrics'][0]['totalActivities'])
 
 total_downloaded = 0
 
@@ -191,6 +198,7 @@ while total_downloaded < total_to_download:
         num_to_download = total_to_download - total_downloaded
 
     search_params = {'start': total_downloaded, 'limit': num_to_download}
+
     # Query Garmin Connect
     print "Making activity request ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
     print url_gc_search + urlencode(search_params)
@@ -198,8 +206,6 @@ while total_downloaded < total_to_download:
     print "Finished activity request ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 
     json_results = json.loads(result)
-
-    # search = json_results['results']['search']
 
     # Pull out just the list of activities.
     activities = json_results
