@@ -1,16 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""
-File:               gcexport.py
-Original Author:    Kyle Krafka (https://github.com/kjkjava/)
-Date:               April 28, 2015
-Description:        This script will export fitness data from Garmin Connect
-                    See README.md for more detailed information
-"""
-
 from urllib import urlencode
-from datetime import datetime
 from getpass import getpass
 from sys import argv
 from os.path import isdir
@@ -22,33 +13,24 @@ import urllib2
 import cookielib
 import json
 import re
-
 import argparse
 
-script_version = '1.0.0'
-current_date = datetime.now().strftime('%Y-%m-%d')
-activities_directory = './' + current_date + '_garmin_connect_export'
+script_version = '2020-06-20'
 
 parser = argparse.ArgumentParser()
-
-parser.add_argument('--version', help="print version and exit", action="store_true")
-parser.add_argument('--username', help="your Garmin Connect username (otherwise, you will be prompted)", nargs='?')
-parser.add_argument('--password', help="your Garmin Connect password (otherwise, you will be prompted)", nargs='?')
-
-parser.add_argument('-d', '--directory', nargs='?', default=activities_directory,
-                    help="the directory to export to (default: './YYYY-MM-DD_garmin_connect_export')")
-
+parser.add_argument('--version', help='print version and exit', action='store_true')
+parser.add_argument('--username', help='your Garmin Connect username (otherwise, you will be prompted)', nargs='?')
+parser.add_argument('--password', help='your Garmin Connect password (otherwise, you will be prompted)', nargs='?')
+parser.add_argument('--directory', help='the directory to export to (otherwise, you will be prompted)', nargs='?')
 args = parser.parse_args()
 
 if args.version:
-    print argv[0] + ", version " + script_version
+    print(argv[0] + ', version ' + script_version)
     exit(0)
 
 cookie_jar = cookielib.CookieJar()
 opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookie_jar))
 
-
-# print cookie_jar
 
 # url is a string, post is a dictionary of POST parameters, headers is a dictionary of headers.
 def http_req(url, post=None, headers=None):
@@ -60,128 +42,116 @@ def http_req(url, post=None, headers=None):
         for header_key, header_value in headers.iteritems():
             request.add_header(header_key, header_value)
     if post:
-        # print "POSTING"
         post = urlencode(post)  # Convert dictionary to POST parameter string.
-    # print request.headers
-    # print cookie_jar
-    # print post
-    # print request
     response = opener.open(request, data=post)  # This line may throw a urllib2.HTTPError.
 
     # N.B. urllib2 will follow any 302 redirects.
-    # Also, the "open" call above may throw a urllib2.HTTPError which is checked for below.
-    # print response.getcode()
-    if response.getcode() == 204:
-        # For activities without GPS coordinates, there is no GPX download (204 = no content).
-        # Write an empty file to prevent re-downloading it.
-        print 'Writing empty file since there was no GPX activity data...'
-        return ''
-    elif response.getcode() != 200:
+    if response.getcode() != 200:
         raise Exception('Bad return code (' + str(response.getcode()) + ') for: ' + url)
 
     return response.read()
 
 
-print 'Welcome to Garmin Connect Exporter!'
+print('Welcome to Garmin Connect Exporter!')
 
-# Create directory for data files.
-if isdir(args.directory):
-    print 'Warning: Output directory already exists. Will skip already-downloaded files and append to the CSV file.'
-
+directory = args.directory if args.directory else raw_input('Directory: ')
 username = args.username if args.username else raw_input('Username: ')
 password = args.password if args.password else getpass()
 
-# Maximum number of activities you can request at once.
-# Used to be 100 and enforced by Garmin for older endpoints; for the current endpoint 'url_gc_search'
-# the limit is not known (I have less than 1000 activities and could get them all in one go)
-limit_maximum = 1000
+# Check directory for data files
+if isdir(directory):
+    print 'Warning: Output directory already exists. Will skip already-downloaded files.'
+else:
+    mkdir(directory)
 
+# Maximum number of activities you can request at once.  Set and enforced by Garmin.
+limit_maximum = 1000
+# Maximum number or retries
 max_tries = 3
 
-WEBHOST = "https://connect.garmin.com"
-REDIRECT = "https://connect.garmin.com/post-auth/login"
-BASE_URL = "http://connect.garmin.com/en-US/signin"
-GAUTH = "http://connect.garmin.com/gauth/hostname"
-SSO = "https://sso.garmin.com/sso"
-CSS = "https://static.garmincdn.com/com.garmin.connect/ui/css/gauth-custom-v1.2-min.css"
-
-data = {'service': REDIRECT,
-        'webhost': WEBHOST,
-        'source': BASE_URL,
-        'redirectAfterAccountLoginUrl': REDIRECT,
-        'redirectAfterAccountCreationUrl': REDIRECT,
-        'gauthHost': SSO,
-        'locale': 'en_US',
-        'id': 'gauth-widget',
-        'cssUrl': CSS,
-        'clientId': 'GarminConnect',
-        'rememberMeShown': 'true',
-        'rememberMeChecked': 'false',
-        'createAccountShown': 'true',
-        'openCreateAccount': 'false',
-        'usernameShown': 'false',
-        'displayNameShown': 'false',
-        'consumeServiceTicket': 'false',
-        'initialFocus': 'true',
-        'embedWidget': 'false',
-        'generateExtraServiceTicket': 'false'}
+webhost = 'https://connect.garmin.com'
+redirect = 'https://connect.garmin.com/modern/'
+base_url = 'https://connect.garmin.com/en-US/signin'
+sso = 'https://sso.garmin.com/sso'
+css = 'https://static.garmincdn.com/com.garmin.connect/ui/css/gauth-custom-v1.2-min.css'
+login_data = {
+    'service': redirect,
+    'webhost': webhost,
+    'source': base_url,
+    'redirectAfterAccountLoginUrl': redirect,
+    'redirectAfterAccountCreationUrl': redirect,
+    'gauthHost': sso,
+    'locale': 'en_US',
+    'id': 'gauth-widget',
+    'cssUrl': css,
+    'clientId': 'GarminConnect',
+    'rememberMeShown': 'true',
+    'rememberMeChecked': 'false',
+    'createAccountShown': 'true',
+    'openCreateAccount': 'false',
+    'displayNameShown': 'false',
+    'consumeServiceTicket': 'false',
+    'initialFocus': 'true',
+    'embedWidget': 'false',
+    'generateExtraServiceTicket': 'true',
+    'generateTwoExtraServiceTickets': 'false',
+    'generateNoServiceTicket': 'false',
+    'globalOptInShown': 'true',
+    'globalOptInChecked': 'false',
+    'mobile': 'false',
+    'connectLegalTerms': 'true',
+    'locationPromptShown': 'true',
+    'showPassword': 'true',
+}
 
 # URLs for various services.
-url_gc_login = 'https://sso.garmin.com/sso/login?' + urllib.urlencode(data)
+url_gc_login = 'https://sso.garmin.com/sso/signin?' + urllib.urlencode(login_data)
 url_gc_post_auth = 'https://connect.garmin.com/modern/activities?'
 url_gc_profile = 'https://connect.garmin.com/modern/profile'
 url_gc_userstats = 'https://connect.garmin.com/modern/proxy/userstats-service/statistics/'
-url_gc_search = 'https://connect.garmin.com/modern/proxy/activitylist-service/activities/search/activities?'
+url_gc_list = 'https://connect.garmin.com/modern/proxy/activitylist-service/activities/search/activities?'
 url_gc_activity = 'https://connect.garmin.com/modern/proxy/activity-service/activity/'
 url_gc_original_activity = 'http://connect.garmin.com/proxy/download-service/files/activity/'
 
 # Initially, we need to get a valid session cookie, so we pull the login page.
-print 'Request login page'
+print('Request login page')
 http_req(url_gc_login)
-print 'Finish login page'
 
 # Now we'll actually login.
-post_data = {'username': username, 'password': password, 'embed': 'true', 'lt': 'e1s1', '_eventId': 'submit',
-             'displayNameRequired': 'false'}  # Fields that are passed in a typical Garmin login.
-print 'Post login data'
-login_response = http_req(url_gc_login, post_data)
-print 'Finish login post'
+post_data = {
+    "username": username,
+    "password": password,
+    "embed": "false",
+    "rememberme": "on",
+}
+post_headers = {"referer": url_gc_login}
 
-# extract the ticket from the login response
+print('Post login data')
+LOGIN_RESPONSE = http_req(url_gc_login + '#', post_data, post_headers).decode()
+# Extract the ticket from the login response.
 pattern = re.compile(r".*\?ticket=([-\w]+)\";.*", re.MULTILINE | re.DOTALL)
-match = pattern.match(login_response)
+match = pattern.match(LOGIN_RESPONSE)
 if not match:
-    raise Exception(
-        'Did not get a ticket in the login response. Cannot log in. Did you enter the correct username and password?')
+    raise Exception('Did not get a ticket in the login response. Cannot log in. Did you enter the correct username and password?')
 login_ticket = match.group(1)
-print 'login ticket=' + login_ticket
 
-print 'Request authentication'
-http_req(url_gc_post_auth + 'ticket=' + login_ticket)
-print 'Finished authentication'
-
-# We should be logged in now.
-if not isdir(args.directory):
-    mkdir(args.directory)
+print('Request authentication URL: ' + url_gc_post_auth + 'ticket=' + login_ticket)
+http_req(url_gc_post_auth + "ticket=" + login_ticket)
 
 # To download all activities, query the userstats on the profile page to know how many are available
-print("Getting display name and user stats")
-profile_page = http_req(url_gc_profile)
-
-# Extract the display name from the profile page, it should be in there as
-# \"displayName\":\"eschep\"
+print('Getting display name via: ' + url_gc_profile)
+profile_page = http_req(url_gc_profile).decode()
+# Extract the display name from the profile page, it should be in there as \"displayName\":\"eschep\"
 pattern = re.compile(r".*\\\"displayName\\\":\\\"([-\w]+)\\\".*", re.MULTILINE | re.DOTALL)
 match = pattern.match(profile_page)
 if not match:
     raise Exception('Did not find the display name in the profile page.')
 display_name = match.group(1)
-print('displayName=' + display_name)
 
+print('Getting user stats via: ' + url_gc_userstats + display_name)
 result = http_req(url_gc_userstats + display_name)
-print("Finished display name and user stats")
 
-print result
-
+# Extract total activities count
 json_results = json.loads(result)
 total_to_download = int(json_results['userMetrics'][0]['totalActivities'])
 
@@ -200,21 +170,16 @@ while total_downloaded < total_to_download:
     search_params = {'start': total_downloaded, 'limit': num_to_download}
 
     # Query Garmin Connect
-    print "Making activity request ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-    print url_gc_search + urlencode(search_params)
-    result = http_req(url_gc_search + urlencode(search_params))
-    print "Finished activity request ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-
-    json_results = json.loads(result)
+    print('Activity list URL: ' + url_gc_list + urlencode(search_params))
+    activity_list = http_req(url_gc_list + urlencode(search_params))
 
     # Pull out just the list of activities.
-    activities = json_results
+    activities = json.loads(activity_list)
 
     # Process each activity.
     for a in activities:
         # Display which entry we're working on.
-        print 'Garmin Connect activity: [' + str(a['activityId']) + ']',
-        print a['activityName']
+        print('Garmin Connect activity: [' + str(a['activityId']) + ']' + ' ' + a['activityName'])
 
         # Retrieve also the detail data from the activity (the one displayed on
         # the https://connect.garmin.com/modern/activity/xxx page), because some
@@ -231,13 +196,12 @@ while total_downloaded < total_to_download:
             if len(details['summaryDTO']) > 0:
                 tries = 0
             else:
-                print 'retrying for ' + str(a['activityId'])
+                print('Retrying for ' + str(a['activityId']))
                 tries -= 1
                 if tries == 0:
-                    raise Exception(
-                        'Did not get "summaryDTO" after ' + str(max_tries) + ' tries for ' + str(a['activityId']))
+                    raise Exception('Did not get "summaryDTO" after ' + str(max_tries) + ' tries for ' + str(a['activityId']))
 
-        data_directory = args.directory + '/' + a['activityType']['typeKey'].replace("/", " - ")
+        data_directory = directory + '/' + a['activityType']['typeKey'].replace("/", " - ")
         if not isdir(data_directory):
             mkdir(data_directory)
         data_filename = data_directory + '/activity_' + str(a['activityId']) + '.zip'
@@ -245,15 +209,14 @@ while total_downloaded < total_to_download:
         file_mode = 'wb'
 
         if isfile(data_filename):
-            print '\tData file already exists; skipping...'
+            print('\tData file already exists; skipping...')
             continue
 
         # Download the data file from Garmin Connect.
         # If the download fails (e.g., due to timeout), this script will die, but nothing
         # will have been written to disk about this activity, so just running it again
         # should pick up where it left off.
-        print '\tDownloading file...',
-
+        print('\tDownloading file...'),
         try:
             data = http_req(download_url)
         except urllib2.HTTPError as e:
@@ -261,7 +224,7 @@ while total_downloaded < total_to_download:
             if e.code == 404:
                 # For manual activities (i.e., entered in online without a file upload), there is no original file.
                 # Write an empty file to prevent re-downloading it.
-                print 'Writing empty file since there was no original activity data...',
+                print('\tWriting empty file since there was no original activity data...')
                 data = ''
             else:
                 raise Exception('Failed. Got an unexpected HTTP error (' + str(e.code) + download_url + ').')
@@ -270,9 +233,8 @@ while total_downloaded < total_to_download:
         save_file.write(data)
         save_file.close()
 
-        print 'Done.'
+        print('Done.')
     total_downloaded += num_to_download
-# End while loop for multiple chunks.
 
 
-print 'Done!'
+print('Finished!')
